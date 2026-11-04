@@ -3,15 +3,21 @@ from faster_whisper import WhisperModel
 from pathlib import Path
 import tempfile
 import shutil
+import os
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+from ollama import chat
+
 
 app = FastAPI(
     title="Cue API",
     description="Local AI-powered desktop assistant",
     version="1.0.0"
 )
+class QuestionRequest(BaseModel):
+    question: str
 
 
-print("Loading Faster Whisper model...")
 
 whisper_model = WhisperModel(
     "tiny",
@@ -19,7 +25,17 @@ whisper_model = WhisperModel(
     compute_type="int8"
 )
 
-print("Faster Whisper model loaded successfully!")
+
+ALLOWED_EXTENSIONS = {
+    ".wav",
+    ".mp3",
+    ".m4a",
+    ".aac",
+    ".ogg",
+    ".flac",
+    ".webm",
+    ".mp4",
+}
 
 
 @app.get("/")
@@ -37,54 +53,141 @@ def health():
 
 
 @app.post("/transcribe")
-async def transcribe_audio(file: UploadFile = File(...)):
-    """
-    Receives an audio file and converts speech into text.
-    """
+def transcribe_audio(file: UploadFile = File(...)):
+    
 
-  
+
+
     if not file.filename:
         raise HTTPException(
             status_code=400,
-            detail="No audio file provided"
+            detail="No file was uploaded."
         )
 
 
-    suffix = Path(file.filename).suffix
+    file_extension = Path(file.filename).suffix.lower()
 
-    with tempfile.NamedTemporaryFile(
-        delete=False,
-        suffix=suffix
-    ) as temp_file:
+  
+    if file_extension not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Unsupported file format: {file_extension}. "
+                f"Supported formats are: {', '.join(ALLOWED_EXTENSIONS)}"
+            )
+        )
 
-        shutil.copyfileobj(file.file, temp_file)
-
-        temp_file_path = temp_file.name
+    temp_file_path = None
 
     try:
-      
+
+
+        with tempfile.NamedTemporaryFile(
+            delete=False,
+            suffix=file_extension
+        ) as temp_file:
+
+     
+            shutil.copyfileobj(file.file, temp_file)
+
+            temp_file_path = temp_file.name
+
+
+ 
+
+        if os.path.getsize(temp_file_path) == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="The uploaded audio file is empty."
+            )
+
+
+
         segments, info = whisper_model.transcribe(
             temp_file_path,
-            beam_size=1
+            beam_size=1,
+
+      
+            vad_filter=True
         )
 
-        
+
+
         transcription = " ".join(
             segment.text.strip()
             for segment in segments
         )
+
+
 
         return {
             "transcription": transcription,
             "language": info.language
         }
 
+
+
+
+    except HTTPException:
+        raise
+
+
     except Exception as error:
+
+        
+        print(f"Transcription error: {error}")
+
+        
         raise HTTPException(
             status_code=500,
-            detail=str(error)
+            detail="Failed to transcribe the audio file."
         )
 
+
+   
+
     finally:
-      
-        Path(temp_file_path).unlink(missing_ok=True)
+
+        if temp_file_path and os.path.exists(temp_file_path):
+            os.remove(temp_file_path)
+
+@app.post("/suggest")
+def suggest_answer(request: QuestionRequest):
+
+    def generate():
+
+        try:
+            stream = chat(
+                model="qwen3:1.7b",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are Cue, a helpful AI assistant. "
+                            "Give clear, concise, and useful answers."
+                        )
+                    },
+                    {
+                        "role": "user",
+                        "content": request.question
+                    }
+                ],
+                stream=True
+            )
+
+            for chunk in stream:
+                content = chunk["message"]["content"]
+
+                if content:
+                    yield content
+
+        except Exception as error:
+            print(f"Suggestion error: {error}")
+
+            yield "\n\n[Failed to generate an answer.]"
+
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/plain"
+    )            
