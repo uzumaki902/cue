@@ -7,6 +7,7 @@ import os
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from ollama import chat
+import time
 
 
 app = FastAPI(
@@ -156,6 +157,9 @@ def suggest_answer(request: QuestionRequest):
 
     def generate():
 
+        start_time = time.perf_counter()
+        first_token_received = False
+
         try:
             stream = chat(
                 model="qwen3:1.7b",
@@ -163,8 +167,10 @@ def suggest_answer(request: QuestionRequest):
                     {
                         "role": "system",
                         "content": (
-                            "You are Cue, a helpful AI assistant. "
-                            "Give clear, concise, and useful answers."
+                            "You are Cue, an AI assistant that helps answer "
+                            "spoken questions. Give concise, direct, and useful "
+                            "answers. Prioritize answering the question immediately. "
+                            "Avoid unnecessary introductions and long explanations."
                         )
                     },
                     {
@@ -172,22 +178,41 @@ def suggest_answer(request: QuestionRequest):
                         "content": request.question
                     }
                 ],
-                stream=True
+                stream=True,
+                think=False
             )
 
             for chunk in stream:
                 content = chunk["message"]["content"]
 
                 if content:
+
+                    
+                    if not first_token_received:
+                        first_token_received = True
+
+                        time_to_first_token = (
+                            time.perf_counter() - start_time
+                        )
+
+                        print(
+                            f"Time to first token: "
+                            f"{time_to_first_token:.2f} seconds"
+                        )
+
                     yield content
 
         except Exception as error:
-            print(f"Suggestion error: {error}")
 
-            yield "\n\n[Failed to generate an answer.]"
+            print(f"Ollama suggestion error: {error}")
+
+            yield (
+                "\n\nUnable to generate an answer. "
+                "Please make sure Ollama is running and the model is installed."
+            )
 
 
     return StreamingResponse(
         generate(),
         media_type="text/plain"
-    )            
+    )

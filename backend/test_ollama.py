@@ -1,5 +1,6 @@
 from ollama import chat
 
+
 stream = chat(
     model="qwen3:1.7b",
     messages=[
