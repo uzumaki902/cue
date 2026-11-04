@@ -1,146 +1,174 @@
-# CUE
+# Cue
 
 A local AI-powered desktop assistant inspired by Parakeet AI.
 
-CUE captures microphone audio, transcribes speech locally, and generates AI-powered answers progressively in real time.
+Cue captures microphone audio, transcribes spoken questions locally using Faster Whisper, and generates AI answers locally using Ollama.
 
 ## Features
 
 - Desktop application built with Electron
 - Start and stop microphone recording
-- Local speech-to-text using Faster Whisper
-- Displays transcription in the app
-- Editable transcription before generating an answer
-- AI-generated answer streaming progressively
-- Local LLM inference using Ollama and Qwen3
-- Performance timing for transcription and AI time-to-first-token
+- Local speech-to-text transcription using Faster Whisper
+- Editable transcription
+- AI-generated answer suggestions using Ollama
+- Progressive/streaming AI responses
+- Local AI processing
 
 ## Tech Stack
 
-### Desktop & Frontend
-- Electron
+### Frontend / Desktop
+
 - Next.js
 - React
 - TypeScript
 - Tailwind CSS
+- Electron
 
-### Backend & AI
+### Backend
+
 - FastAPI
 - Faster Whisper
 - Ollama
 - Qwen3 1.7B
 
-## Architecture
+## Prerequisites
 
-```text
-Electron Desktop Window
-        ↓
-Next.js + React Frontend
-        ↓
-FastAPI Backend
-       ↙        ↘
-Faster Whisper   Ollama + Qwen3
-```
+Install the following before running the project:
 
-All AI processing runs locally on the machine.
+- Node.js
+- Python
+- Ollama
 
-## How It Works
-
-1. Click **Start Recording**.
-2. Speak into the microphone.
-3. Click **Stop**.
-4. Audio is sent to the local FastAPI backend.
-5. Faster Whisper transcribes the audio locally.
-6. The transcription appears in the application.
-7. Click **Suggest Answer**.
-8. Ollama generates an answer locally.
-9. The answer streams progressively into the application.
-
-## Setup
-
-### 1. Install Ollama
-
-Install Ollama and download the required model:
+Install the Ollama model:
 
 ```bash
 ollama pull qwen3:1.7b
 ```
 
-### 2. Start the Backend
+## Installation
+
+Clone the repository:
 
 ```bash
-cd backend
+git clone <YOUR_REPOSITORY_URL>
 ```
 
-Create and activate a virtual environment, install dependencies, then run:
+Navigate to the frontend:
+
+```bash
+cd frontend
+```
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+## Backend Setup
+
+Navigate to the backend directory and create a Python virtual environment:
+
+```bash
+python -m venv venv
+```
+
+Activate it on Windows:
+
+```powershell
+venv\Scripts\activate
+```
+
+Install the required Python packages:
+
+```bash
+pip install fastapi uvicorn faster-whisper python-multipart ollama
+```
+
+Start the FastAPI backend:
 
 ```bash
 uvicorn main:app --reload
 ```
 
-The backend runs at:
+The backend should run on:
 
 ```text
 http://127.0.0.1:8000
 ```
 
-### 3. Start the Desktop Application
+## Running the Desktop Application
+
+Open a new terminal and navigate to the frontend directory:
 
 ```bash
 cd frontend
-npm install
-npm run dev
 ```
 
-Then start Electron:
+Start the Cue desktop application:
 
 ```bash
 npm run electron
 ```
 
-## Performance Testing
+This opens Cue in an Electron desktop window.
 
-The backend logs:
+## How to Use
 
-- Whisper transcription time
-- AI time-to-first-token
+1. Start the FastAPI backend.
+2. Ensure Ollama is installed and the model is available.
+3. Run `npm run electron`.
+4. Click **Start Recording**.
+5. Speak your question.
+6. Click **Stop**.
+7. Wait for the local transcription.
+8. Edit the transcription if necessary.
+9. Click **Suggest Answer**.
+10. Watch the AI response appear progressively.
 
-This helps measure the responsiveness of the local AI pipeline.
-
-## Local Processing
-
-CUE is designed so that:
-
-- Speech-to-text runs locally using Faster Whisper
-- AI generation runs locally using Ollama
-- No cloud AI API is required for transcription or answer generation
-
-## Project Structure
+## Local AI Architecture
 
 ```text
-cue/
-├── backend/
-│   ├── main.py
-│   └── requirements.txt
-│
-└── frontend/
-    ├── app/
-    ├── electron.mjs
-    ├── package.json
-    └── ...
+Microphone
+    ↓
+Electron + Next.js Desktop UI
+    ↓
+FastAPI
+    ↓
+Faster Whisper
+    ↓
+Transcription
+    ↓
+Ollama (Qwen3)
+    ↓
+Streaming AI Answer
 ```
 
-## Assignment Requirements Covered
+## Performance Testing
 
-- Desktop application
-- Start and Stop controls
-- Microphone audio capture
-- Speech transcription display
-- Suggest Answer functionality
-- Progressive AI answer streaming
-- Local speech-to-text
-- Local LLM inference
+Cue includes basic local AI performance monitoring:
 
-## Demo
+- Transcription processing time
+- AI time-to-first-token
 
-CUE runs as a local Electron desktop application.
+These timings are logged by the backend during testing.
+
+## Notes
+
+The speech-to-text and LLM processing run locally.
+
+The current desktop prototype requires the FastAPI backend and Ollama to be running locally before launching the Electron application.
+
+## Build
+
+To build the Next.js frontend:
+
+```bash
+npm run build
+```
+
+To launch the Electron desktop application:
+
+```bash
+npm run electron
+```
