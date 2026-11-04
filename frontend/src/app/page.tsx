@@ -1,10 +1,14 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 
 export default function Home() {
 
   const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
 
 
   const [status, setStatus] = useState("Waiting for audio");
@@ -12,11 +16,21 @@ export default function Home() {
 
   const [transcript, setTranscript] = useState("");
 
+  const [answer, setAnswer] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
 
 
   const audioChunksRef = useRef<Blob[]>([]);
+
+  useEffect(() => {
+    return () => {
+      mediaRecorderRef.current?.stream
+        .getTracks()
+        .forEach((track) => track.stop());
+    };
+  }, []);
 
   const startRecording = async () => {
     try {
@@ -51,8 +65,6 @@ export default function Home() {
         console.log("Recording complete:", audioBlob);
 
         try {
-          setStatus("Transcribing...");
-
    
           const formData = new FormData();
 
@@ -61,7 +73,7 @@ export default function Home() {
 
  
           const response = await fetch(
-            "http://127.0.0.1:8000/transcribe",
+            `${API_URL}/transcribe`,
             {
               method: "POST",
               body: formData,
@@ -69,6 +81,10 @@ export default function Home() {
           );
 
           if (!response.ok) {
+            const errorText = await response.text();
+
+            console.error("Transcription API error:", errorText);
+
             throw new Error("Transcription failed");
           }
 
@@ -76,15 +92,21 @@ export default function Home() {
 
           console.log("Transcript:", data);
 
-          setTranscript(data.transcription);
+          const text = (data.transcription ?? "").trim();
 
-          setStatus("Transcription complete");
+          setTranscript(text);
+
+          setStatus(
+            text
+              ? "Transcription complete"
+              : "No speech detected, try again"
+          );
         } catch (error) {
           console.error("Transcription error:", error);
 
           setStatus("Transcription failed");
         } finally {
-          setIsRecording(false);
+          setIsTranscribing(false);
         }
       };
 
@@ -110,6 +132,76 @@ export default function Home() {
     mediaRecorder.stop();
 
     mediaRecorder.stream.getTracks().forEach((track) => track.stop());
+
+    setIsRecording(false);
+    setIsTranscribing(true);
+    setStatus("Transcribing...");
+  };
+
+  const suggestAnswer = async () => {
+    if (
+      !transcript.trim() ||
+      isRecording ||
+      isTranscribing ||
+      isGenerating
+    ) {
+      return;
+    }
+
+    try {
+      setIsGenerating(true);
+      setAnswer("");
+
+      const response = await fetch(
+        `${API_URL}/suggest`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            question: transcript,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+
+        console.error("Suggestion API error:", errorText);
+
+        throw new Error("Failed to generate answer");
+      }
+
+      const reader = response.body?.getReader();
+
+      if (!reader) {
+        throw new Error("Unable to read response stream");
+      }
+
+      const decoder = new TextDecoder();
+      let fullAnswer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) {
+          break;
+        }
+
+        const chunk = decoder.decode(value, {
+          stream: true,
+        });
+
+        fullAnswer += chunk;
+        setAnswer(fullAnswer);
+      }
+    } catch (error) {
+      console.error("Suggestion error:", error);
+      setAnswer("Unable to generate an answer. Please try again.");
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   return (
@@ -149,7 +241,7 @@ export default function Home() {
 
               <button
                 onClick={startRecording}
-                disabled={isRecording}
+                disabled={isRecording || isTranscribing || isGenerating}
                 className="rounded-xl bg-white px-6 py-3 font-medium text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isRecording ? "Recording..." : "Start Recording"}
@@ -178,14 +270,23 @@ export default function Home() {
               </span>
             </div>
 
-            <p className="min-h-16 text-lg text-zinc-300">
-              {transcript || "Your spoken question will appear here..."}
-            </p>
+            <textarea
+              value={transcript}
+              onChange={(e) => setTranscript(e.target.value)}
+              placeholder="Your spoken question will appear here..."
+              className="min-h-24 w-full resize-none bg-transparent text-lg text-zinc-300 outline-none placeholder:text-zinc-600"
+            />
           </div>
 
 
-          <button className="mb-6 w-full rounded-xl bg-zinc-100 py-4 font-semibold text-black transition hover:bg-white">
-            Suggest Answer
+          <button
+            onClick={suggestAnswer}
+            disabled={
+              !transcript || isRecording || isTranscribing || isGenerating
+            }
+            className="mb-6 w-full rounded-xl bg-zinc-100 py-4 font-semibold text-black transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isGenerating ? "Generating..." : "Suggest Answer"}
           </button>
 
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6">
@@ -198,7 +299,7 @@ export default function Home() {
             </div>
 
             <p className="min-h-24 leading-7 text-zinc-300">
-              Your AI-generated answer will appear here...
+              {answer || "Your AI-generated answer will appear here..."}
             </p>
           </div>
 
