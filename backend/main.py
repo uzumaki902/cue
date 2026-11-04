@@ -8,6 +8,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from ollama import chat
 import time
+from fastapi.middleware.cors import CORSMiddleware
 
 
 app = FastAPI(
@@ -15,6 +16,16 @@ app = FastAPI(
     description="Local AI-powered desktop assistant",
     version="1.0.0"
 )
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
 class QuestionRequest(BaseModel):
     question: str
 
@@ -104,6 +115,8 @@ def transcribe_audio(file: UploadFile = File(...)):
 
 
 
+        start_time = time.perf_counter()
+
         segments, info = whisper_model.transcribe(
             temp_file_path,
             beam_size=1,
@@ -119,6 +132,10 @@ def transcribe_audio(file: UploadFile = File(...)):
             for segment in segments
         )
 
+        transcription_time = time.perf_counter() - start_time
+        print(
+            f"Transcription time: {transcription_time:.2f} seconds"
+        )
 
 
         return {
